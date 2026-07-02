@@ -1,0 +1,50 @@
+services:
+  transcribe-api:
+    build:
+      context: ./transcribe-api
+      args:
+        WHISPER_MODEL: ${WHISPER_MODEL:-small}
+    ports:
+      - "${PORT:-8000}:8000"
+    environment:
+      TRANSCRIBE_BACKEND: ${TRANSCRIBE_BACKEND:-faster-whisper}
+      WHISPER_MODEL: ${WHISPER_MODEL:-small}
+      WHISPER_DEVICE: ${WHISPER_DEVICE:-cpu}
+      WHISPER_COMPUTE_TYPE: ${WHISPER_COMPUTE_TYPE:-int8}
+      WHISPER_LANGUAGE_DEFAULT: ${WHISPER_LANGUAGE_DEFAULT:-pt}
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-25}
+      MAX_AUDIO_SECONDS: ${MAX_AUDIO_SECONDS:-1800}
+      API_KEY: ${API_KEY:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      NEW_RELIC_LICENSE_KEY: ${NEW_RELIC_LICENSE_KEY:-}
+      NEW_RELIC_APP_NAME: ${NEW_RELIC_API_APP_NAME:-transcribe-api}
+      NEW_RELIC_ENABLED: ${NEW_RELIC_ENABLED:-true}
+      NEW_RELIC_DISTRIBUTED_TRACING_ENABLED: ${NEW_RELIC_DISTRIBUTED_TRACING_ENABLED:-true}
+      NEW_RELIC_LOG_LEVEL: ${NEW_RELIC_LOG_LEVEL:-info}
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/v1/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 180s
+    restart: unless-stopped
+
+  leodias-bot:
+    build:
+      context: ./leodias-bot
+    environment:
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      TRANSCRIBE_API_URL: ${TRANSCRIBE_API_URL:-http://transcribe-api:8000/v1/transcribe}
+      TRANSCRIBE_API_KEY: ${API_KEY:-}
+      TRANSCRIBE_TIMEOUT_SECONDS: ${TRANSCRIBE_TIMEOUT_SECONDS:-120}
+      TRANSCRIBE_FALLBACK_URL: ${TRANSCRIBE_FALLBACK_URL:-}
+      MAX_FILE_SIZE_MB: ${MAX_FILE_SIZE_MB:-25}
+      NEW_RELIC_LICENSE_KEY: ${NEW_RELIC_LICENSE_KEY:-}
+      NEW_RELIC_APP_NAME: ${NEW_RELIC_BOT_APP_NAME:-leodias-bot}
+      NEW_RELIC_ENABLED: ${NEW_RELIC_ENABLED:-true}
+      NEW_RELIC_DISTRIBUTED_TRACING_ENABLED: ${NEW_RELIC_DISTRIBUTED_TRACING_ENABLED:-true}
+      NEW_RELIC_LABELS: ${NEW_RELIC_LABELS:-}
+    depends_on:
+      transcribe-api:
+        condition: service_healthy
+    restart: unless-stopped
