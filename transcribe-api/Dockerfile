@@ -36,11 +36,13 @@ RUN python -c "from faster_whisper import WhisperModel; WhisperModel('${WHISPER_
 
 # whisper.cpp backend: CLI binary + ggml weights of the same size as
 # WHISPER_MODEL, so switching TRANSCRIBE_BACKEND compares backends only.
+# The model path is derived at runtime from WHISPER_MODEL (config.py), so a
+# runtime model that doesn't match the baked weights fails at startup
+# instead of silently using the wrong model.
 COPY --from=whispercpp /src/build/bin/whisper-cli /usr/local/bin/whisper-cli
 RUN mkdir -p /models \
     && curl -fL --retry 3 -o "/models/ggml-${WHISPER_MODEL}.bin" \
         "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-${WHISPER_MODEL}.bin"
-ENV WHISPER_CPP_MODEL_PATH=/models/ggml-${WHISPER_MODEL}.bin
 
 COPY newrelic.ini entrypoint.sh ./
 COPY app ./app
