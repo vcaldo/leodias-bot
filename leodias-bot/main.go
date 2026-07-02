@@ -133,6 +133,16 @@ func extractAudio(msg *tgbotapi.Message) *audioRef {
 		}
 		return &audioRef{FileID: msg.Audio.FileID, FileName: name, FileSize: msg.Audio.FileSize}
 	}
+	if msg.VideoNote != nil {
+		return &audioRef{FileID: msg.VideoNote.FileID, FileName: "video_note.mp4", FileSize: msg.VideoNote.FileSize}
+	}
+	if msg.Video != nil {
+		name := msg.Video.FileName
+		if name == "" {
+			name = "video.mp4"
+		}
+		return &audioRef{FileID: msg.Video.FileID, FileName: name, FileSize: msg.Video.FileSize}
+	}
 	if msg.Document != nil {
 		name := msg.Document.FileName
 		if strings.HasPrefix(msg.Document.MimeType, "audio/") || allowedExtensions[strings.ToLower(filepath.Ext(name))] {
@@ -146,9 +156,20 @@ func handleMessage(nrApp *newrelic.Application, bot *tgbotapi.BotAPI, cfg *confi
 	// audio attached directly, or /transcribe replying to an audio message
 	audio := extractAudio(msg)
 	if audio == nil && msg.IsCommand() && msg.Command() == "transcribe" {
+		if msg.ReplyToMessage == nil {
+			// In groups with privacy mode enabled (the BotFather default),
+			// Telegram omits reply_to_message entirely for messages the bot
+			// can't see, so the reply target never reaches us.
+			log.Printf("chat %d: /transcribe arrived without reply_to_message (not a reply, or group privacy mode)", msg.Chat.ID)
+			reply(bot, msg, "I can't see the message you replied to. If this is a group, disable privacy mode via @BotFather (/setprivacy) or make me an admin — or just forward the audio to me.")
+			return
+		}
 		audio = extractAudio(msg.ReplyToMessage)
 		if audio == nil {
-			reply(bot, msg, "Reply to an audio message with /transcribe, or just send me the audio.")
+			log.Printf("chat %d: /transcribe reply target has no usable audio (voice=%v audio=%v video=%v video_note=%v document=%v)",
+				msg.Chat.ID, msg.ReplyToMessage.Voice != nil, msg.ReplyToMessage.Audio != nil,
+				msg.ReplyToMessage.Video != nil, msg.ReplyToMessage.VideoNote != nil, msg.ReplyToMessage.Document != nil)
+			reply(bot, msg, "That message doesn't contain audio I can transcribe. Reply to a voice/audio/video message with /transcribe, or send me the audio directly.")
 			return
 		}
 	}
