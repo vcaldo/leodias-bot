@@ -23,15 +23,9 @@ class Settings:
         self.compute_type = os.environ.get("WHISPER_COMPUTE_TYPE", "int8")
         self.language_default = os.environ.get("WHISPER_LANGUAGE_DEFAULT", "pt")
 
-        # whisper.cpp backend only. The default must track WHISPER_MODEL:
-        # the image bakes /models/ggml-<model>.bin at build time, so if the
-        # runtime model doesn't match the built image the file is missing
-        # and startup fails loudly instead of transcribing with stale weights.
+        # whisper.cpp backend only
         self.whisper_cpp_bin = os.environ.get("WHISPER_CPP_BIN", "whisper-cli")
-        self.whisper_cpp_model_path = (
-            os.environ.get("WHISPER_CPP_MODEL_PATH", "").strip()
-            or f"/models/ggml-{self.model}.bin"
-        )
+        self.whisper_cpp_model_path = os.environ.get("WHISPER_CPP_MODEL_PATH", "")
 
         self.max_upload_mb = _env_int("MAX_UPLOAD_MB", 25)
         self.max_audio_seconds = _env_int("MAX_AUDIO_SECONDS", 1800)
