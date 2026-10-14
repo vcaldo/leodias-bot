@@ -25,6 +25,7 @@ type config struct {
 	FallbackURL    string
 	TimeoutSeconds int
 	MaxFileSizeMB  int
+	Blacklist      map[int64]bool
 }
 
 func loadConfig() (*config, error) {
@@ -35,6 +36,7 @@ func loadConfig() (*config, error) {
 		FallbackURL:    os.Getenv("TRANSCRIBE_FALLBACK_URL"),
 		TimeoutSeconds: envInt("TRANSCRIBE_TIMEOUT_SECONDS", 120),
 		MaxFileSizeMB:  envInt("MAX_FILE_SIZE_MB", 25),
+		Blacklist:      envIDSet("BLACKLIST_USER_IDS"),
 	}
 	if cfg.BotToken == "" {
 		return nil, fmt.Errorf("TELEGRAM_BOT_TOKEN is required")
@@ -55,6 +57,28 @@ func envInt(name string, def int) int {
 		log.Fatalf("invalid integer for %s: %q", name, raw)
 	}
 	return v
+}
+
+// envIDSet parses a comma-separated list of Telegram user IDs.
+func envIDSet(name string) map[int64]bool {
+	ids := map[int64]bool{}
+	for _, part := range strings.Split(os.Getenv(name), ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		id, err := strconv.ParseInt(part, 10, 64)
+		if err != nil {
+			log.Fatalf("invalid user id in %s: %q", name, part)
+		}
+		ids[id] = true
+	}
+	return ids
+}
+
+// isBlacklisted reports whether msg was sent by a blacklisted user.
+func (c *config) isBlacklisted(msg *tgbotapi.Message) bool {
+	return msg != nil && msg.From != nil && c.Blacklist[msg.From.ID]
 }
 
 // newRelicApp initializes the agent from NEW_RELIC_* env vars. Returns nil
@@ -89,6 +113,9 @@ func main() {
 		log.Fatalf("telegram init failed: %v", err)
 	}
 	log.Printf("authorized as @%s", bot.Self.UserName)
+	if len(cfg.Blacklist) > 0 {
+		log.Printf("ignoring %d blacklisted user(s)", len(cfg.Blacklist))
+	}
 
 	httpClient := &http.Client{Timeout: time.Duration(cfg.TimeoutSeconds) * time.Second}
 	primary := &TranscribeClient{BaseURL: cfg.APIURL, APIKey: cfg.APIKey, Client: httpClient}
@@ -153,6 +180,12 @@ func extractAudio(msg *tgbotapi.Message) *audioRef {
 }
 
 func handleMessage(nrApp *newrelic.Application, bot *tgbotapi.BotAPI, cfg *config, primary, fallback *TranscribeClient, msg *tgbotapi.Message) {
+	// blacklisted users are ignored silently, whether they send audio or
+	// /transcribe, and their audio isn't transcribed for anyone else either
+	if cfg.isBlacklisted(msg) || cfg.isBlacklisted(msg.ReplyToMessage) {
+		return
+	}
+
 	// audio attached directly, or /transcribe replying to an audio message
 	audio := extractAudio(msg)
 	if audio == nil && msg.IsCommand() && msg.Command() == "transcribe" {
