@@ -2,4 +2,6 @@ fastapi>=0.115
 uvicorn[standard]>=0.32
 python-multipart>=0.0.12
 faster-whisper>=1.1
+# av 19 removed the metadata_errors kwarg faster-whisper 1.2.1 still passes to av.open()
+av<19
 newrelic>=10.0
